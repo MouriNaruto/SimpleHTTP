@@ -73,7 +73,7 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public HttpResponse SendRequest(string Content, RequestType RequestType)
+        public HttpResponse SendRequest(string Content, RequestType RequestType, string PostContent = null)
         {
             HttpResponse response = new HttpResponse();
             byte[] toreturn = new byte[0];
@@ -83,6 +83,8 @@ namespace SimpleHTTP
                 "Host: " + this.Hostname + "\r\n" +
                 "Content-Length: 0\r\n" + CustomizeHeader +
                 "\r\n";
+            if (RequestType == RequestType.POST)
+                request += PostContent;
             var socketresponse = socket.Send(Encoding.UTF8.GetBytes(request));
             byte[] buffer = new byte[8192];
             int bytes;
@@ -200,7 +202,7 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public HttpResponse SendRequest(string Content, RequestType RequestType)
+        public HttpResponse SendRequest(string Content, RequestType RequestType, string PostContent = null)
         {
             HttpResponse response = new HttpResponse();
             byte[] toreturn = new byte[0];
@@ -209,6 +211,8 @@ namespace SimpleHTTP
                 "Host: " + this.Hostname + "\r\n" +
                 "Content-Length: 0\r\n" + CustomizeHeader +
                 "\r\n";
+            if (RequestType == RequestType.POST)
+                request += PostContent;
             using (NetworkStream networkStream = new NetworkStream(socket))
             {
                 using (SslStream sslStream = new SslStream(networkStream, false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null))
