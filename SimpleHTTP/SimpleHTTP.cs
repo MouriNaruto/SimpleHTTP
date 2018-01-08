@@ -78,47 +78,50 @@ namespace SimpleHTTP
             byte[] buffer = new byte[8192];
             int bytes;
             bool ishead = true;
+            int contentlength = 0;
             do
             {
-                try
+                bytes = socket.Receive(buffer, 8192, SocketFlags.None);
+                if (ishead)
                 {
-                    bytes = socket.Receive(buffer, 8192, SocketFlags.None);
-                    if (ishead)
+                    for (int i = 0; i < bytes - 3; i++)
                     {
-                        for (int i = 0; i < bytes - 3; i++)
+                        //通过检查第一个双回车来判断分割点
+                        if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
                         {
-                            if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
-                            {
-                                ishead = false;
-                                var tmp0 = toreturn.Clone() as byte[];
-                                toreturn = new byte[tmp0.Length + i];
-                                tmp0.CopyTo(toreturn, 0);
-                                Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
-                                response.Header = Encoding.ASCII.GetString(toreturn);
+                            ishead = false;
+                            var tmp0 = toreturn.Clone() as byte[];
+                            toreturn = new byte[tmp0.Length + i];
+                            tmp0.CopyTo(toreturn, 0);
+                            Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
+                            response.Header = Encoding.ASCII.GetString(toreturn);
 #if DEBUG
-                                Debug.WriteLine("头接受完成");
-                                Debug.WriteLine(response.Header);
+                            Debug.WriteLine("头接受完成");
+                            Debug.WriteLine(response.Header);
 #endif
-                                toreturn = new byte[bytes - i - 4];
-                                Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
-                                break;
-                            }
+                            var lengthindex = response.Header.IndexOf("Content-Length: ");
+                            var tmpstring = response.Header.Substring(lengthindex + 16);
+                            var lengthendindex = tmpstring.IndexOf("\r\n");
+                            var contentlengthstr = tmpstring.Substring(0, lengthendindex);
+                            contentlength = Convert.ToInt32(contentlengthstr);
+#if DEBUG
+                            Debug.WriteLine("预计的内容长度：" + contentlengthstr);
+#endif
+                            toreturn = new byte[bytes - i - 4];
+                            Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                            break;
                         }
-                        if (!ishead) continue;
                     }
-                    var tmp = toreturn.Clone() as byte[];
-                    toreturn = new byte[tmp.Length + bytes];
-                    tmp.CopyTo(toreturn, 0);
-                    Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
+                    if (!ishead) continue;
+                }
+                var tmp = toreturn.Clone() as byte[];
+                toreturn = new byte[tmp.Length + bytes];
+                tmp.CopyTo(toreturn, 0);
+                Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
+            } while (bytes > 0 && toreturn.Length < contentlength);
 #if DEBUG
-                    Debug.WriteLine("接受字节:" + toreturn.Length);
+            Debug.WriteLine("接受内容字节:" + toreturn.Length);
 #endif
-                }
-                catch
-                {
-                    break;
-                }
-            } while (bytes > 0);
             if (!ishead) response.Content = toreturn;
             socket.Close();
             return response;
@@ -189,47 +192,50 @@ namespace SimpleHTTP
                     byte[] buffer = new byte[8192];
                     int bytes;
                     bool ishead = true;
+                    int contentlength = 0;
                     do
                     {
-                        try
+                        bytes = sslStream.Read(buffer, 0, 8192);
+                        if (ishead)
                         {
-                            bytes = sslStream.Read(buffer, 0, 8192);
-                            if (ishead)
+                            for (int i = 0; i < bytes - 3; i++)
                             {
-                                for (int i = 0; i < bytes - 3; i++)
+                                //通过检查第一个双回车来判断分割点
+                                if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
                                 {
-                                    if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
-                                    {
-                                        ishead = false;
-                                        var tmp0 = toreturn.Clone() as byte[];
-                                        toreturn = new byte[tmp0.Length + i];
-                                        tmp0.CopyTo(toreturn, 0);
-                                        Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
-                                        response.Header = Encoding.ASCII.GetString(toreturn);
+                                    ishead = false;
+                                    var tmp0 = toreturn.Clone() as byte[];
+                                    toreturn = new byte[tmp0.Length + i];
+                                    tmp0.CopyTo(toreturn, 0);
+                                    Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
+                                    response.Header = Encoding.ASCII.GetString(toreturn);
 #if DEBUG
-                                        Debug.WriteLine("头接受完成");
-                                        Debug.WriteLine(response.Header);
+                                    Debug.WriteLine("头接受完成");
+                                    Debug.WriteLine(response.Header);
 #endif
-                                        toreturn = new byte[bytes - i - 4];
-                                        Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
-                                        break;
-                                    }
+                                    var lengthindex = response.Header.IndexOf("Content-Length: ");
+                                    var tmpstring = response.Header.Substring(lengthindex + 16);
+                                    var lengthendindex = tmpstring.IndexOf("\r\n");
+                                    var contentlengthstr = tmpstring.Substring(0, lengthendindex);
+                                    contentlength = Convert.ToInt32(contentlengthstr);
+#if DEBUG
+                                    Debug.WriteLine("预计的内容长度：" + contentlengthstr);
+#endif
+                                    toreturn = new byte[bytes - i - 4];
+                                    Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                                    break;
                                 }
-                                if (!ishead) continue;
                             }
-                            var tmp = toreturn.Clone() as byte[];
-                            toreturn = new byte[tmp.Length + bytes];
-                            tmp.CopyTo(toreturn, 0);
-                            Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
+                            if (!ishead) continue;
+                        }
+                        var tmp = toreturn.Clone() as byte[];
+                        toreturn = new byte[tmp.Length + bytes];
+                        tmp.CopyTo(toreturn, 0);
+                        Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
+                    } while (bytes > 0 && toreturn.Length < contentlength);
 #if DEBUG
-                            Debug.WriteLine("接受字节:" + toreturn.Length);
+                    Debug.WriteLine("接受内容字节:" + toreturn.Length);
 #endif
-                        }
-                        catch
-                        {
-                            break;
-                        }
-                    } while (bytes > 0);
                     if (!ishead) response.Content = toreturn;
                 }
             }
