@@ -81,7 +81,14 @@ namespace SimpleHTTP
             int contentlength = 0;
             do
             {
-                bytes = socket.Receive(buffer, 8192, SocketFlags.None);
+                try
+                {
+                    bytes = socket.Receive(buffer, 8192, SocketFlags.None);
+                }
+                catch
+                {
+                    break;
+                }
                 if (ishead)
                 {
                     for (int i = 0; i < bytes - 3; i++)
@@ -100,13 +107,16 @@ namespace SimpleHTTP
                             Debug.WriteLine(response.Header);
 #endif
                             var lengthindex = response.Header.IndexOf("Content-Length: ");
-                            var tmpstring = response.Header.Substring(lengthindex + 16);
-                            var lengthendindex = tmpstring.IndexOf("\r\n");
-                            var contentlengthstr = tmpstring.Substring(0, lengthendindex);
-                            contentlength = Convert.ToInt32(contentlengthstr);
+                            if (lengthindex >= 0)
+                            {
+                                var tmpstring = response.Header.Substring(lengthindex + 16);
+                                var lengthendindex = tmpstring.IndexOf("\r\n");
+                                var contentlengthstr = tmpstring.Substring(0, lengthendindex);
+                                contentlength = Convert.ToInt32(contentlengthstr);
 #if DEBUG
-                            Debug.WriteLine("预计的内容长度：" + contentlengthstr);
+                                Debug.WriteLine("预计的内容长度：" + contentlengthstr);
 #endif
+                            }
                             toreturn = new byte[bytes - i - 4];
                             Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
                             break;
@@ -118,7 +128,7 @@ namespace SimpleHTTP
                 toreturn = new byte[tmp.Length + bytes];
                 tmp.CopyTo(toreturn, 0);
                 Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
-            } while (bytes > 0 && toreturn.Length < contentlength);
+            } while (bytes > 0 && toreturn.Length != contentlength);
 #if DEBUG
             Debug.WriteLine("接受内容字节:" + toreturn.Length);
 #endif
@@ -195,7 +205,14 @@ namespace SimpleHTTP
                     int contentlength = 0;
                     do
                     {
-                        bytes = sslStream.Read(buffer, 0, 8192);
+                        try
+                        {
+                            bytes = sslStream.Read(buffer, 0, 8192);
+                        }
+                        catch
+                        {
+                            break;
+                        }
                         if (ishead)
                         {
                             for (int i = 0; i < bytes - 3; i++)
@@ -214,13 +231,16 @@ namespace SimpleHTTP
                                     Debug.WriteLine(response.Header);
 #endif
                                     var lengthindex = response.Header.IndexOf("Content-Length: ");
-                                    var tmpstring = response.Header.Substring(lengthindex + 16);
-                                    var lengthendindex = tmpstring.IndexOf("\r\n");
-                                    var contentlengthstr = tmpstring.Substring(0, lengthendindex);
-                                    contentlength = Convert.ToInt32(contentlengthstr);
+                                    if (lengthindex >= 0)
+                                    {
+                                        var tmpstring = response.Header.Substring(lengthindex + 16);
+                                        var lengthendindex = tmpstring.IndexOf("\r\n");
+                                        var contentlengthstr = tmpstring.Substring(0, lengthendindex);
+                                        contentlength = Convert.ToInt32(contentlengthstr);
 #if DEBUG
-                                    Debug.WriteLine("预计的内容长度：" + contentlengthstr);
+                                        Debug.WriteLine("预计的内容长度：" + contentlengthstr);
 #endif
+                                    }
                                     toreturn = new byte[bytes - i - 4];
                                     Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
                                     break;
@@ -232,7 +252,7 @@ namespace SimpleHTTP
                         toreturn = new byte[tmp.Length + bytes];
                         tmp.CopyTo(toreturn, 0);
                         Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
-                    } while (bytes > 0 && toreturn.Length < contentlength);
+                    } while (bytes > 0 && toreturn.Length != contentlength);
 #if DEBUG
                     Debug.WriteLine("接受内容字节:" + toreturn.Length);
 #endif
