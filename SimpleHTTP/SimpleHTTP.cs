@@ -81,7 +81,11 @@ namespace SimpleHTTP
             socket.ReceiveTimeout = 500;
             var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
                 "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: 0\r\n" + CustomizeHeader +
+                "Content-Length: " +
+                ((RequestType == RequestType.GET) ? "0" :
+                (PostContent == null ? "0" :
+                PostContent.Length.ToString())) +
+                "\r\n" + CustomizeHeader +
                 "\r\n";
             if (RequestType == RequestType.POST)
                 request += PostContent;
@@ -209,7 +213,11 @@ namespace SimpleHTTP
             socket.Connect(IPAddress.Parse(HostIP), Hostport);
             var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
                 "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: 0\r\n" + CustomizeHeader +
+                "Content-Length: " +
+                ((RequestType == RequestType.GET) ? "0" :
+                (PostContent == null ? "0" :
+                PostContent.Length.ToString())) +
+                "\r\n" + CustomizeHeader +
                 "\r\n";
             if (RequestType == RequestType.POST)
                 request += PostContent;
