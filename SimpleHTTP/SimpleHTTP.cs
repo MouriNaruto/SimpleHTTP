@@ -31,6 +31,15 @@ namespace SimpleHTTP
         public int Hostport { get; set; } = 80;
         #endregion
 
+        #region 自定义
+        /// <summary>
+        /// 这是用于自定义的Header部分；
+        /// 不要在里面包含Host和Content-Length；
+        /// 确保以单\r\n结尾（或保持为空）。
+        /// </summary>
+        public string CustomizeHeader { get; set; }
+        #endregion
+
         #region 私有字段
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         #endregion
@@ -72,7 +81,7 @@ namespace SimpleHTTP
             socket.ReceiveTimeout = 500;
             var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
                 "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: 0\r\n" +
+                "Content-Length: 0\r\n" + CustomizeHeader +
                 "\r\n";
             var socketresponse = socket.Send(Encoding.UTF8.GetBytes(request));
             byte[] buffer = new byte[8192];
@@ -149,6 +158,15 @@ namespace SimpleHTTP
         public int Hostport { get; set; } = 443;
         #endregion
 
+        #region 自定义
+        /// <summary>
+        /// 这是用于自定义的Header部分；
+        /// 不要在里面包含Host和Content-Length；
+        /// 确保以单\r\n结尾（或保持为空）。
+        /// </summary>
+        public string CustomizeHeader { get; set; }
+        #endregion
+
         #region 私有字段
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         #endregion
@@ -189,7 +207,7 @@ namespace SimpleHTTP
             socket.Connect(IPAddress.Parse(HostIP), Hostport);
             var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
                 "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: 0\r\n" +
+                "Content-Length: 0\r\n" + CustomizeHeader +
                 "\r\n";
             using (NetworkStream networkStream = new NetworkStream(socket))
             {
