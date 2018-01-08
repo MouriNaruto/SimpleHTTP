@@ -14,6 +14,12 @@ namespace SimpleHTTP
         POST
     }
 
+    public class HttpResponse
+    {
+        public string Header { get; internal set; }
+        public byte[] Content { get; internal set; }
+    }
+
     /// <summary>
     /// 用于Http（非Https）访问
     /// </summary>
@@ -58,8 +64,9 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public byte[] SendRequest(string Content, RequestType RequestType)
+        public HttpResponse SendRequest(string Content, RequestType RequestType)
         {
+            HttpResponse response = new HttpResponse();
             byte[] toreturn = new byte[0];
             socket.Connect(IPAddress.Parse(HostIP), Hostport);
             socket.ReceiveTimeout = 500;
@@ -67,14 +74,38 @@ namespace SimpleHTTP
                 "Host: " + this.Hostname + "\r\n" +
                 "Content-Length: 0\r\n" +
                 "\r\n";
-            var response = socket.Send(Encoding.UTF8.GetBytes(request));
+            var socketresponse = socket.Send(Encoding.UTF8.GetBytes(request));
             byte[] buffer = new byte[8192];
             int bytes;
+            bool ishead = true;
             do
             {
                 try
                 {
                     bytes = socket.Receive(buffer, 8192, SocketFlags.None);
+                    if (ishead)
+                    {
+                        for (int i = 0; i < bytes - 3; i++)
+                        {
+                            if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
+                            {
+                                ishead = false;
+                                var tmp0 = toreturn.Clone() as byte[];
+                                toreturn = new byte[tmp0.Length + i];
+                                tmp0.CopyTo(toreturn, 0);
+                                Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
+                                response.Header = Encoding.ASCII.GetString(toreturn);
+#if DEBUG
+                                Debug.WriteLine("头接受完成");
+                                Debug.WriteLine(response.Header);
+#endif
+                                toreturn = new byte[bytes - i - 4];
+                                Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                                break;
+                            }
+                        }
+                        if (!ishead) continue;
+                    }
                     var tmp = toreturn.Clone() as byte[];
                     toreturn = new byte[tmp.Length + bytes];
                     tmp.CopyTo(toreturn, 0);
@@ -88,8 +119,9 @@ namespace SimpleHTTP
                     break;
                 }
             } while (bytes > 0);
+            if (!ishead) response.Content = toreturn;
             socket.Close();
-            return toreturn;
+            return response;
         }
     }
 
@@ -137,8 +169,9 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public byte[] SendRequest(string Content, RequestType RequestType)
+        public HttpResponse SendRequest(string Content, RequestType RequestType)
         {
+            HttpResponse response = new HttpResponse();
             byte[] toreturn = new byte[0];
             socket.Connect(IPAddress.Parse(HostIP), Hostport);
             var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
@@ -151,14 +184,39 @@ namespace SimpleHTTP
                 {
                     sslStream.AuthenticateAsClient(this.Hostname);
                     sslStream.ReadTimeout = 500;
+                    var a = Encoding.UTF8.GetBytes(request);
                     sslStream.Write(Encoding.UTF8.GetBytes(request));
                     byte[] buffer = new byte[8192];
                     int bytes;
+                    bool ishead = true;
                     do
                     {
                         try
                         {
                             bytes = sslStream.Read(buffer, 0, 8192);
+                            if (ishead)
+                            {
+                                for (int i = 0; i < bytes - 3; i++)
+                                {
+                                    if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
+                                    {
+                                        ishead = false;
+                                        var tmp0 = toreturn.Clone() as byte[];
+                                        toreturn = new byte[tmp0.Length + i];
+                                        tmp0.CopyTo(toreturn, 0);
+                                        Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
+                                        response.Header = Encoding.ASCII.GetString(toreturn);
+#if DEBUG
+                                        Debug.WriteLine("头接受完成");
+                                        Debug.WriteLine(response.Header);
+#endif
+                                        toreturn = new byte[bytes - i - 4];
+                                        Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                                        break;
+                                    }
+                                }
+                                if (!ishead) continue;
+                            }
                             var tmp = toreturn.Clone() as byte[];
                             toreturn = new byte[tmp.Length + bytes];
                             tmp.CopyTo(toreturn, 0);
@@ -172,10 +230,11 @@ namespace SimpleHTTP
                             break;
                         }
                     } while (bytes > 0);
+                    if (!ishead) response.Content = toreturn;
                 }
             }
             socket.Close();
-            return toreturn;
+            return response;
         }
 
         //证书校验，使用.NET提供的手段
