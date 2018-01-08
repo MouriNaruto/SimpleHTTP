@@ -52,6 +52,12 @@ namespace SimpleHTTP
         }
         #endregion
 
+        /// <summary>
+        /// 用于发送Http请求
+        /// </summary>
+        /// <param name="Content">内容</param>
+        /// <param name="RequestType">请求类型</param>
+        /// <returns>请求回应</returns>
         public byte[] SendRequest(string Content, RequestType RequestType)
         {
             byte[] toreturn = new byte[0];
@@ -125,6 +131,12 @@ namespace SimpleHTTP
         }
         #endregion
 
+        /// <summary>
+        /// 用于发送Https请求
+        /// </summary>
+        /// <param name="Content">内容</param>
+        /// <param name="RequestType">请求类型</param>
+        /// <returns>请求回应</returns>
         public byte[] SendRequest(string Content, RequestType RequestType)
         {
             byte[] toreturn = new byte[0];
@@ -166,6 +178,7 @@ namespace SimpleHTTP
             return toreturn;
         }
 
+        //证书校验，使用.NET提供的手段
         static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
             X509Certificate2 x509Certificate2 = new X509Certificate2(certificate);
