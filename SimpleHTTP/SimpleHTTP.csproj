@@ -2,6 +2,17 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>TobiichiAmane</Authors>
+    <Company>Pixeezplus</Company>
+    <Description>Http and Https client based on sockets, allowing you to customize every detail of the HTTP(S) package, including resolve hostname by yourself without changing system hosts or DNS servers.</Description>
+    <Copyright>Pixeezplus</Copyright>
+    <PackageLicenseUrl>https://raw.githubusercontent.com/TobiichiAmane/SimpleHTTP/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/TobiichiAmane/SimpleHTTP</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TobiichiAmane/SimpleHTTP</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>Under early development. Very unstable and unreliable. **NOT** recommended in your projects.</PackageReleaseNotes>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 
 </Project>
