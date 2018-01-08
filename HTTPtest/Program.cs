@@ -11,7 +11,7 @@ namespace HTTPtest
     {
         static void Main(string[] args)
         {
-            HttpsClient httpsClient = new HttpsClient("cn.bing.com", "202.89.233.101");
+            HttpsClient httpsClient = new HttpsClient("cn.bing.com");
             var res = httpsClient.SendRequest("https://cn.bing.com/?mkt=zh-CN", RequestType.GET);
             Console.WriteLine(Encoding.ASCII.GetString(res));
             Console.ReadKey();

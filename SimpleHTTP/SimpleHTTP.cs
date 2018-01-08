@@ -47,7 +47,8 @@ namespace SimpleHTTP
         /// <param name="Hostname">目标主机名</param>
         public HttpClient(string Hostname)
         {
-
+            this.Hostname = Hostname;
+            this.HostIP = Dns.GetHostEntry(Hostname).AddressList[0].ToString();
         }
         #endregion
 
@@ -119,7 +120,8 @@ namespace SimpleHTTP
         /// <param name="Hostname">目标主机名</param>
         public HttpsClient(string Hostname)
         {
-
+            this.Hostname = Hostname;
+            this.HostIP = Dns.GetHostEntry(Hostname).AddressList[0].ToString();
         }
         #endregion
 
