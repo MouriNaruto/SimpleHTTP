@@ -182,6 +182,7 @@ namespace SimpleHTTP
         static bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
             X509Certificate2 x509Certificate2 = new X509Certificate2(certificate);
+            chain.Build(x509Certificate2);
             return x509Certificate2.Verify();
         }
     }
