@@ -14,6 +14,30 @@ namespace SimpleHTTP
         POST
     }
 
+    /// <summary>
+    /// 一些琐碎的静态方法
+    /// </summary>
+    public static class HttpHelper
+    {
+        /// <summary>
+        /// 用于从请求里获取Hostname
+        /// </summary>
+        /// <param name="Content"></param>
+        /// <returns></returns>
+        public static string GetHostname(string Content)
+        {
+            var firstdslash = Content.IndexOf("//");
+            if (firstdslash == -1) firstdslash = -2;
+            string tmp0 = Content.Substring(firstdslash + 2);
+            var firstslash = tmp0.IndexOf("/");
+            if (firstslash == -1) firstslash = tmp0.Length;
+            string tmp1 = tmp0.Substring(0, firstslash);
+            var firstq = tmp1.IndexOf(":");
+            if (firstq == -1) return tmp1;
+            else return tmp1.Substring(0, firstq);
+        }
+    }
+
     public class HttpResponse
     {
         public string Header { get; internal set; }

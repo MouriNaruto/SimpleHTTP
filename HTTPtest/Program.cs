@@ -12,8 +12,8 @@ namespace HTTPtest
     {
         static void Main(string[] args)
         {
-            HttpsClient httpClient = new HttpsClient("www.pixiv.net", "210.129.120.41");
-            var res = httpClient.SendRequest("https://www.pixiv.net/", RequestType.GET);
+            HttpsClient httpClient = new HttpsClient(HttpHelper.GetHostname("https://cn.bing.com/?mkt=zh-CN"));
+            var res = httpClient.SendRequest("https://cn.bing.com/?mkt=zh-CN", RequestType.GET);
             Console.WriteLine(res.Header);
             if (File.Exists("test.html"))
                 File.Delete("test.html");
