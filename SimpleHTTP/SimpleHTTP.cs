@@ -5,14 +5,10 @@ using System.Net.Sockets;
 using System.Text;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 
 namespace SimpleHTTP
 {
-    public enum RequestType
-    {
-        GET,
-        POST
-    }
 
     /// <summary>
     /// 一些琐碎的静态方法
@@ -41,18 +37,19 @@ namespace SimpleHTTP
     public class HttpResponse
     {
         public string Header { get; internal set; }
-        public byte[] Content { get; internal set; }
+        public System.IO.Stream Content { get; internal set; }
     }
 
     /// <summary>
     /// 用于Http（非Https）访问
     /// </summary>
-    public class HttpClient
+    public class SinpleHttpRequest:IDisposable
     {
         #region 目标信息
         public string Hostname { get; private set; }
-        public string HostIP { get; private set; }
+        public IPAddress HostIP { get; private set; }
         public int Hostport { get; set; } = 80;
+        public bool IsBusy { get; private set; } = false;
         #endregion
 
         #region 自定义
@@ -74,7 +71,7 @@ namespace SimpleHTTP
         /// </summary>
         /// <param name="Hostname">目标主机名</param>
         /// <param name="HostIP">目标IP地址</param>
-        public HttpClient(string Hostname, string HostIP)
+        public SinpleHttpRequest(string Hostname, IPAddress HostIP)
         {
             this.Hostname = Hostname;
             this.HostIP = HostIP;
@@ -84,10 +81,10 @@ namespace SimpleHTTP
         /// 透过DNS构造客户端
         /// </summary>
         /// <param name="Hostname">目标主机名</param>
-        public HttpClient(string Hostname)
+        public SinpleHttpRequest(string Hostname)
         {
             this.Hostname = Hostname;
-            this.HostIP = Dns.GetHostEntry(Hostname).AddressList[0].ToString();
+            this.HostIP = Dns.GetHostEntry(Hostname).AddressList[0];
         }
         #endregion
 
@@ -97,23 +94,29 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public HttpResponse SendRequest(string Content, RequestType RequestType, string PostContent = null)
+        public async Task<HttpResponse> SendRequestAsync(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
         {
-            HttpResponse response = new HttpResponse();
-            byte[] toreturn = new byte[0];
-            socket.Connect(IPAddress.Parse(HostIP), Hostport);
-            socket.ReceiveTimeout = 500;
-            var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
-                "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: " +
-                ((RequestType == RequestType.GET) ? "0" :
-                (PostContent == null ? "0" :
-                PostContent.Length.ToString())) +
-                "\r\n" + CustomizeHeader +
-                "\r\n";
-            if (RequestType == RequestType.POST)
-                request += PostContent;
-            var socketresponse = socket.Send(Encoding.UTF8.GetBytes(request));
+            IsBusy = true;
+            try
+            {
+                return await Sendrequestinner(Content, RequestType, PostContent??Array.Empty<byte>()).ConfigureAwait(false);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+            
+        }
+
+        protected virtual async Task<HttpResponse> Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent)
+        {
+            Connect();
+            SEND(Content, RequestType, PostContent, out HttpResponse response, out System.Collections.Generic.IEnumerable<byte[]> message);
+            foreach (var one in message)
+            {
+                await Task.Factory.FromAsync((a, b) => socket.BeginSend(one, 0, one.Length, SocketFlags.None, a, b), socket.EndSend, null).ConfigureAwait(false);
+            }
+            System.IO.MemoryStream memoryStream = new System.IO.MemoryStream();
             byte[] buffer = new byte[8192];
             int bytes;
             bool ishead = true;
@@ -122,7 +125,7 @@ namespace SimpleHTTP
             {
                 try
                 {
-                    bytes = socket.Receive(buffer, 8192, SocketFlags.None);
+                    bytes = await Task.Factory.FromAsync((a, b) => socket.BeginReceive(buffer, 0, 8192, SocketFlags.None, a, b), socket.EndReceive, null).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -136,11 +139,8 @@ namespace SimpleHTTP
                         if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
                         {
                             ishead = false;
-                            var tmp0 = toreturn.Clone() as byte[];
-                            toreturn = new byte[tmp0.Length + i];
-                            tmp0.CopyTo(toreturn, 0);
-                            Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
-                            response.Header = Encoding.ASCII.GetString(toreturn);
+
+                            response.Header = Encoding.UTF8.GetString(buffer, 0, i);
 #if DEBUG
                             Debug.WriteLine("头接受完成");
                             Debug.WriteLine(response.Header);
@@ -156,46 +156,85 @@ namespace SimpleHTTP
                                 Debug.WriteLine("预计的内容长度：" + contentlengthstr);
 #endif
                             }
-                            toreturn = new byte[bytes - i - 4];
-                            Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                            await memoryStream.WriteAsync(buffer, i + 4, bytes - i - 4).ConfigureAwait(false);
                             break;
                         }
                     }
                     if (!ishead) continue;
                 }
-                var tmp = toreturn.Clone() as byte[];
-                toreturn = new byte[tmp.Length + bytes];
-                tmp.CopyTo(toreturn, 0);
-                Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
-            } while (bytes > 0 && toreturn.Length != contentlength);
+                await memoryStream.WriteAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+            } while (bytes > 0 && memoryStream.Length != contentlength);
 #if DEBUG
-            Debug.WriteLine("接受内容字节:" + toreturn.Length);
+            Debug.WriteLine("接受内容字节:" + memoryStream.Length);
 #endif
-            if (!ishead) response.Content = toreturn;
-            socket.Close();
+            memoryStream.Seek(0, System.IO.SeekOrigin.Begin);
+            if (!ishead) response.Content = memoryStream;
+            //socket.Disconnect(true); ;
             return response;
         }
+
+        protected void Connect()
+        {
+            socket.ReceiveTimeout = 500;
+            //await Task.Factory.FromAsync((a, b) => socket.BeginConnect(HostIP, Hostport, a, b), socket.EndConnect, null).ConfigureAwait(false);
+            socket.Connect(HostIP, Hostport);
+        }
+        protected void SEND(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent, out HttpResponse response, out System.Collections.Generic.IEnumerable<byte[]> message)
+        {
+            response = new HttpResponse();
+            var request = (RequestType.Method + " " + Content + " HTTP/1.1\r\n" +
+                "Host: " + this.Hostname + "\r\n" +
+                "Content-Length: " +
+                PostContent.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "\r\n" + CustomizeHeader +
+                "\r\n");
+            message = new byte[][] { Encoding.UTF8.GetBytes(request), PostContent };
+        }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // 要检测冗余调用
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // 释放托管状态(托管对象)。
+                    socket.Close();
+                }
+
+                // 释放未托管的资源(未托管的对象)并在以下内容中替代终结器。
+                // 将大型字段设置为 null。
+
+                disposedValue = true;
+            }
+        }
+
+        // 仅当以上 Dispose(bool disposing) 拥有用于释放未托管资源的代码时才替代终结器。
+        ~SinpleHttpRequest()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(false);
+        }
+
+        // 添加此代码以正确实现可处置模式。
+        public void Dispose()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(true);
+            // 如果在以上内容中替代了终结器，则取消注释以下行。
+            GC.SuppressFinalize(this);
+        }
+        #endregion
+
     }
 
     /// <summary>
     /// 用于Https访问
     /// </summary>
-    public class HttpsClient
+    public class SinpleHttpsRequest: SinpleHttpRequest
     {
-        #region 目标信息
-        public string Hostname { get; private set; }
-        public string HostIP { get; private set; }
-        public int Hostport { get; set; } = 443;
-        #endregion
-
-        #region 自定义
-        /// <summary>
-        /// 这是用于自定义的Header部分；
-        /// 不要在里面包含Host和Content-Length；
-        /// 确保以单\r\n结尾（或保持为空）。
-        /// </summary>
-        public string CustomizeHeader { get; set; }
-        #endregion
 
         #region 私有字段
         Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -207,20 +246,18 @@ namespace SimpleHTTP
         /// </summary>
         /// <param name="Hostname">目标主机名</param>
         /// <param name="HostIP">目标IP地址</param>
-        public HttpsClient(string Hostname, string HostIP)
+        public SinpleHttpsRequest(string Hostname, IPAddress HostIP):base(Hostname,HostIP)
         {
-            this.Hostname = Hostname;
-            this.HostIP = HostIP;
+
         }
 
         /// <summary>
         /// 透过DNS构造客户端
         /// </summary>
         /// <param name="Hostname">目标主机名</param>
-        public HttpsClient(string Hostname)
+        public SinpleHttpsRequest(string Hostname):base(Hostname)
         {
-            this.Hostname = Hostname;
-            this.HostIP = Dns.GetHostEntry(Hostname).AddressList[0].ToString();
+
         }
         #endregion
 
@@ -230,29 +267,24 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public HttpResponse SendRequest(string Content, RequestType RequestType, string PostContent = null)
+        protected override async Task<HttpResponse> Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
         {
-            HttpResponse response = new HttpResponse();
-            byte[] toreturn = new byte[0];
-            socket.Connect(IPAddress.Parse(HostIP), Hostport);
-            var request = ((RequestType == RequestType.GET) ? "GET" : "POST") + " " + Content + " HTTP/1.1\r\n" +
-                "Host: " + this.Hostname + "\r\n" +
-                "Content-Length: " +
-                ((RequestType == RequestType.GET) ? "0" :
-                (PostContent == null ? "0" :
-                PostContent.Length.ToString())) +
-                "\r\n" + CustomizeHeader +
-                "\r\n";
-            if (RequestType == RequestType.POST)
-                request += PostContent;
+            Connect();//.ConfigureAwait(false);
+            //socket.ReceiveTimeout = 500;
+            //await Task.Factory.FromAsync((a, b) => socket.BeginConnect(HostIP, Hostport, a, b), socket.EndConnect, null).ConfigureAwait(false);
+            //socket.Connect(HostIP, Hostport);
+            SEND(Content, RequestType, PostContent, out var response, out var message);
             using (NetworkStream networkStream = new NetworkStream(socket))
             {
                 using (SslStream sslStream = new SslStream(networkStream, false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null))
                 {
                     sslStream.AuthenticateAsClient(this.Hostname);
                     sslStream.ReadTimeout = 500;
-                    var a = Encoding.UTF8.GetBytes(request);
-                    sslStream.Write(Encoding.UTF8.GetBytes(request));
+                    foreach(var one in message)
+                    {
+                        await sslStream.WriteAsync(one, 0, one.Length).ConfigureAwait(false);
+                    }
+                    System.IO.MemoryStream memoryStream = new System.IO.MemoryStream();
                     byte[] buffer = new byte[8192];
                     int bytes;
                     bool ishead = true;
@@ -275,11 +307,8 @@ namespace SimpleHTTP
                                 if (buffer[i] == 13 && buffer[i + 1] == 10 && buffer[i + 2] == 13 && buffer[i + 3] == 10)
                                 {
                                     ishead = false;
-                                    var tmp0 = toreturn.Clone() as byte[];
-                                    toreturn = new byte[tmp0.Length + i];
-                                    tmp0.CopyTo(toreturn, 0);
-                                    Array.Copy(buffer, 0, toreturn, tmp0.Length, i);
-                                    response.Header = Encoding.ASCII.GetString(toreturn);
+
+                                    response.Header = Encoding.UTF8.GetString(buffer, 0, i);
 #if DEBUG
                                     Debug.WriteLine("头接受完成");
                                     Debug.WriteLine(response.Header);
@@ -295,25 +324,23 @@ namespace SimpleHTTP
                                         Debug.WriteLine("预计的内容长度：" + contentlengthstr);
 #endif
                                     }
-                                    toreturn = new byte[bytes - i - 4];
-                                    Array.Copy(buffer, i + 4, toreturn, 0, bytes - i - 4);
+                                    await memoryStream.WriteAsync(buffer, i + 4, bytes - i - 4).ConfigureAwait(false);
                                     break;
                                 }
                             }
                             if (!ishead) continue;
                         }
-                        var tmp = toreturn.Clone() as byte[];
-                        toreturn = new byte[tmp.Length + bytes];
-                        tmp.CopyTo(toreturn, 0);
-                        Array.Copy(buffer, 0, toreturn, tmp.Length, bytes);
-                    } while (bytes > 0 && toreturn.Length != contentlength);
+                        await memoryStream.WriteAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    } while (bytes > 0 && memoryStream.Length != contentlength);
 #if DEBUG
-                    Debug.WriteLine("接受内容字节:" + toreturn.Length);
+                    Debug.WriteLine("接受内容字节:" + memoryStream.Length);
 #endif
-                    if (!ishead) response.Content = toreturn;
+                    memoryStream.Seek(0, System.IO.SeekOrigin.Begin);
+
+                    if (!ishead) response.Content = memoryStream;
                 }
             }
-            socket.Close();
+            //socket.Disconnect(true);
             return response;
         }
 

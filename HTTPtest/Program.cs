@@ -10,15 +10,15 @@ namespace HTTPtest
 {
     class Program
     {
-        static void Main(string[] args)
+        async static Task Main(string[] args)
         {
-            HttpsClient httpClient = new HttpsClient(HttpHelper.GetHostname("https://cn.bing.com/?mkt=zh-CN"));
-            var res = httpClient.SendRequest("https://cn.bing.com/?mkt=zh-CN", RequestType.GET);
+            SinpleHttpsRequest httpClient = new SinpleHttpsRequest(HttpHelper.GetHostname("https://cn.bing.com/?mkt=zh-CN"));
+            var res = await httpClient.SendRequestAsync("https://cn.bing.com/?mkt=zh-CN", System.Net.Http.HttpMethod.Get);
             Console.WriteLine(res.Header);
             if (File.Exists("test.html"))
                 File.Delete("test.html");
             FileStream file = new FileStream("test.html", FileMode.CreateNew);
-            file.Write(res.Content, 0, res.Content.Length);
+            file.Write(((MemoryStream)res.Content).ToArray(), 0, (int)res.Content.Length);
             file.Close();
             Console.ReadKey();
             return;
