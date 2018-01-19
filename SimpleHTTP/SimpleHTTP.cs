@@ -123,11 +123,14 @@ namespace SimpleHTTP
                             {
                                 var tmpstring = response.Header.Substring(lengthindex + 16);
                                 var lengthendindex = tmpstring.IndexOf("\r\n");
-                                var contentlengthstr = tmpstring.Substring(0, lengthendindex);
-                                contentlength = Convert.ToInt32(contentlengthstr);
+                                if (lengthendindex > -1)
+                                {
+                                    var contentlengthstr = tmpstring.Substring(0, lengthendindex);
+                                    contentlength = Convert.ToInt32(contentlengthstr);
 #if DEBUG
-                                Debug.WriteLine("预计的内容长度：" + contentlengthstr);
+                                    Debug.WriteLine("预计的内容长度：" + contentlengthstr);
 #endif
+                                }
                             }
                             memoryStream.Write(buffer, i + 4, bytes - i - 4);
                             break;
@@ -135,7 +138,7 @@ namespace SimpleHTTP
                     }
                     if (!ishead) continue;
                 }
-                memoryStream.Write(buffer, 0, buffer.Length);
+                memoryStream.Write(buffer, 0, bytes);
             } while (bytes > 0 && memoryStream.Length != contentlength);
 #if DEBUG
             Debug.WriteLine("接受内容字节:" + memoryStream.Length);
