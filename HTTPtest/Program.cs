@@ -13,7 +13,7 @@ namespace HTTPtest
         async static Task Main(string[] args)
         {
             SinpleHttpsRequest httpClient = new SinpleHttpsRequest("cn.bing.com");
-            var res = httpClient.SendRequest("https://cn.bing.com/?mkt=zh-CN", System.Net.Http.HttpMethod.Get);
+            var res = await httpClient.SendRequestAsync("https://cn.bing.com/?mkt=zh-CN", System.Net.Http.HttpMethod.Get);
             Console.WriteLine(res.Header);
             if (File.Exists("test.html"))
                 File.Delete("test.html");

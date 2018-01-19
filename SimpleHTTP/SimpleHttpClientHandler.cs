@@ -38,7 +38,7 @@ namespace SimpleHTTP
             HttpResponse httpResponse = null;
             if (unbusyelement != null)
             {
-                httpResponse=unbusyelement.SendRequest(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
+                httpResponse= await unbusyelement.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
             }
             else if (requests.Count >= MaxThreadPerIp)
             {
@@ -47,7 +47,7 @@ namespace SimpleHTTP
             else
             {
                 var ourrequest = CreateRequest(request.RequestUri, ip);
-                httpResponse = ourrequest.SendRequest(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
+                httpResponse = await ourrequest.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
                 requests.Add(ourrequest);
             }
             return new HttpResponseMessage() { Content = new StreamContent(httpResponse.Content) };

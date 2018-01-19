@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 
 namespace SimpleHTTP
 {
@@ -69,12 +70,12 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        public HttpResponse SendRequest(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
+        public async Task<HttpResponse> SendRequestAsync(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
         {
             IsBusy = true;
             try
             {
-                return Sendrequestinner(Content, RequestType, PostContent??Array.Empty<byte>());
+                return await Sendrequestinner(Content, RequestType, PostContent??Array.Empty<byte>());
             }
             finally
             {
@@ -82,12 +83,12 @@ namespace SimpleHTTP
             }
             
         }
-        protected void SendMessage(System.IO.Stream networkStream, HttpResponse response, System.Collections.Generic.IEnumerable<byte[]> message,
+        protected async Task SendMessageAsync(System.IO.Stream networkStream, HttpResponse response, System.Collections.Generic.IEnumerable<byte[]> message,
             string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent)
         {
             foreach (var one in message)
             {
-                networkStream.Write(one, 0, one.Length);
+                await networkStream.WriteAsync(one, 0, one.Length);
             }
             System.IO.MemoryStream memoryStream = new System.IO.MemoryStream();
             byte[] buffer = new byte[8192];
@@ -98,7 +99,7 @@ namespace SimpleHTTP
             {
                 try
                 {
-                    bytes = networkStream.Read(buffer, 0, 8192);
+                    bytes = await networkStream.ReadAsync(buffer, 0, 8192);
                 }
                 catch
                 {
@@ -132,13 +133,13 @@ namespace SimpleHTTP
 #endif
                                 }
                             }
-                            memoryStream.Write(buffer, i + 4, bytes - i - 4);
+                            await memoryStream.WriteAsync(buffer, i + 4, bytes - i - 4);
                             break;
                         }
                     }
                     if (!ishead) continue;
                 }
-                memoryStream.Write(buffer, 0, bytes);
+                await memoryStream.WriteAsync(buffer, 0, bytes);
             } while (bytes > 0 && memoryStream.Length != contentlength);
 #if DEBUG
             Debug.WriteLine("接受内容字节:" + memoryStream.Length);
@@ -148,19 +149,19 @@ namespace SimpleHTTP
             if (!ishead) response.Content = memoryStream;
         }
 
-        protected virtual HttpResponse Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent)
+        protected virtual async Task<HttpResponse> Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent)
         {
-            Connect();
+            await ConnectAsync();
             SEND(Content, RequestType, PostContent, out HttpResponse response, out System.Collections.Generic.IEnumerable<byte[]> message);
-            SendMessage(socket.GetStream(), response, message, Content, RequestType, PostContent);
+            await SendMessageAsync(socket.GetStream(), response, message, Content, RequestType, PostContent);
             return response;
         }
 
-        protected void Connect()
+        protected async Task ConnectAsync()
         {
             socket.ReceiveTimeout = 5000;
             //await Task.Factory.FromAsync((a, b) => socket.BeginConnect(HostIP, Hostport, a, b), socket.EndConnect, null).ConfigureAwait(false);
-            socket.Connect(HostIP, Hostport);
+            await socket.ConnectAsync(HostIP, Hostport);
         }
         protected void SEND(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent, out HttpResponse response, out System.Collections.Generic.IEnumerable<byte[]> message)
         {
@@ -250,9 +251,9 @@ namespace SimpleHTTP
         /// <param name="Content">内容</param>
         /// <param name="RequestType">请求类型</param>
         /// <returns>请求回应</returns>
-        protected override HttpResponse Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
+        protected override async Task<HttpResponse> Sendrequestinner(string Content, System.Net.Http.HttpMethod RequestType, byte[] PostContent = null)
         {
-            Connect();//.ConfigureAwait(false);
+            await ConnectAsync();//.ConfigureAwait(false);
             //socket.ReceiveTimeout = 500;
             //await Task.Factory.FromAsync((a, b) => socket.BeginConnect(HostIP, Hostport, a, b), socket.EndConnect, null).ConfigureAwait(false);
             //socket.Connect(HostIP, Hostport);
@@ -261,7 +262,7 @@ namespace SimpleHTTP
             {
                 sslStream.AuthenticateAsClient(this.Hostname);
                 sslStream.ReadTimeout = 5000;
-                SendMessage(sslStream, response, message, Content, RequestType, PostContent);
+                await SendMessageAsync(sslStream, response, message, Content, RequestType, PostContent);
             }
             //socket.Disconnect(true);
             return response;
