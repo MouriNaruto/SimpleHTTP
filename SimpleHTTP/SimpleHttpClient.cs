@@ -9,7 +9,7 @@ namespace SimpleHTTP
         static SimpleHttpClientHandler Instance { get; } = new SimpleHttpClientHandlerThreadSafe();
         public SimpleHttpClient() : base(Instance)
         {
-
+            //DefaultRequestHeaders.Add("Connection", "keep-alive");
         }
         public SimpleHttpClient(SimpleHttpClientHandler handler) : base(handler)
         {

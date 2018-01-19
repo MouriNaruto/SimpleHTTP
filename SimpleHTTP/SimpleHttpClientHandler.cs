@@ -13,8 +13,7 @@ namespace SimpleHTTP
 {
     public abstract class SimpleHttpClientHandler : HttpMessageHandler
     {
-        public int MaxThreadPerIp { get; set; }
-        public int MaxThread { get; set; }
+        public int MaxThreadPerIp { get; set; } = 10;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -31,38 +30,94 @@ namespace SimpleHTTP
                     throw new NotSupportedException(nameof(UriHostNameType) + "  " + request.RequestUri);
             }
         }
+        protected ConcurrentQueue<Action> concurrentQueue = new ConcurrentQueue<Action>();
         protected async Task<HttpResponseMessage> SendInnerAsync(HttpRequestMessage request, CancellationToken cancellationToken,IPAddress ip)
         {
             var requests = GetRequestsCache(ip);
             var unbusyelement = requests.Where(a => !a.IsBusy).FirstOrDefault();
             HttpResponse httpResponse = null;
+            async Task getcontent(SinpleHttpRequest thisrequest)
+            {
+                var requestcontent = request.Content == null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync();
+                StringBuilder sb = new StringBuilder();
+                IEnumerable<KeyValuePair<string, IEnumerable<string>>> header = request.Headers;
+                //if (/*!request.Headers.Contains("Host")*/true)
+                //{
+                //    header = header.Concat(Enumerable.Repeat(new KeyValuePair<string, IEnumerable<string>>("Host", Enumerable.Repeat(request.RequestUri.Host, 1)), 1));
+                //}
+                //if (/*!request.Headers.Contains("Content-Length")*/true)
+                //{
+                //    header = header.Concat(Enumerable.Repeat(new KeyValuePair<string, IEnumerable<string>>("Content-Length",
+                //        Enumerable.Repeat(requestcontent.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),1)),1));
+                //}
+                foreach (var one in header)
+                {
+                    foreach(var two in one.Value)
+                    {
+                        sb.Append(one.Key);
+                        sb.Append(": ");
+                        sb.Append(two);
+                        sb.Append("\r\n");
+                    }
+                }
+                thisrequest.CustomizeHeader = sb.ToString();
+                httpResponse = await thisrequest.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method,requestcontent);
+                _ = CheckQueueAsync();
+            }
             if (unbusyelement != null)
             {
-                httpResponse= await unbusyelement.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
+                await getcontent(unbusyelement);
             }
             else if (requests.Count >= MaxThreadPerIp)
             {
                 //wait
+                TaskCompletionSource<HttpResponseMessage> taskCompletionSource = new TaskCompletionSource<HttpResponseMessage>();
+                concurrentQueue.Enqueue(async() =>
+                {
+                    taskCompletionSource.SetResult(await SendInnerAsync(request, cancellationToken, ip));
+                });
+                return await taskCompletionSource.Task;
             }
             else
             {
-                var ourrequest = CreateRequest(request.RequestUri, ip);
-                httpResponse = await ourrequest.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method);
-                requests.Add(ourrequest);
+                SinpleHttpRequest ourrequest;
+                lock (requests)
+                {
+                    ourrequest = CreateRequest(request.RequestUri, ip);
+                    requests.Add(ourrequest);
+                }
+                await getcontent(ourrequest);
             }
             return new HttpResponseMessage() { Content = new StreamContent(httpResponse.Content) };
         }
-        protected SinpleHttpRequest CreateRequest(Uri uri,IPAddress ip)
+        int doing = 0;
+        protected async Task CheckQueueAsync()
+        {
+            if(Interlocked.CompareExchange(ref doing, 1, 0) == 1)
+            {
+                return;
+            }
+            while (!concurrentQueue.IsEmpty)
+            {
+                if(concurrentQueue.TryDequeue(out var value))
+                {
+                    value();
+                }
+                await Task.Yield();
+            }
+            Interlocked.Exchange(ref doing, 0);
+        }
+        internal SinpleHttpRequest CreateRequest(Uri uri,IPAddress ip)
         {
             return uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) ? new SinpleHttpsRequest(uri.Host, ip) : new SinpleHttpRequest(uri.Host, ip);
         }
 
-        protected abstract List<SinpleHttpRequest> GetRequestsCache(IPAddress iPAddress);
+        internal abstract List<SinpleHttpRequest> GetRequestsCache(IPAddress iPAddress);
     }
     internal class SimpleHttpClientHandlerThreadSafe : SimpleHttpClientHandler
     {
         protected ConcurrentDictionary<IPAddress, List<SinpleHttpRequest>> dictionary = new ConcurrentDictionary<IPAddress, List<SinpleHttpRequest>>();
-        protected override List<SinpleHttpRequest> GetRequestsCache(IPAddress iPAddress)
+        internal override List<SinpleHttpRequest> GetRequestsCache(IPAddress iPAddress)
         {
             if (dictionary.TryGetValue(iPAddress, out var value))
             {
