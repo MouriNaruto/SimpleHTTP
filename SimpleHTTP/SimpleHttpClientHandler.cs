@@ -13,6 +13,13 @@ namespace SimpleHTTP
 {
     public abstract class SimpleHttpClientHandler : HttpMessageHandler
     {
+        public virtual async Task<IPAddress> GetIPFromHostAsync(string host)
+        {
+            return (await Dns.GetHostAddressesAsync(host).ConfigureAwait(false)).First();
+        }
+        public abstract HostsConfig GetHostsConfig();
+        public abstract void LoadHostsConfig(HostsConfig hostsConfig);
+
         public int MaxThreadPerIp { get; set; } = 10;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -21,7 +28,7 @@ namespace SimpleHTTP
             {
                 case UriHostNameType.Basic:
                 case UriHostNameType.Dns:
-                    return await SendInnerAsync(request, cancellationToken, (await Dns.GetHostAddressesAsync(request.RequestUri.DnsSafeHost).ConfigureAwait(false)).First()).ConfigureAwait(false);
+                    return await SendInnerAsync(request, cancellationToken, await GetIPFromHostAsync(request.RequestUri.DnsSafeHost)).ConfigureAwait(false);
                 case UriHostNameType.IPv4:
                 case UriHostNameType.IPv6:
                     return await SendInnerAsync(request, cancellationToken, IPAddress.Parse(request.RequestUri.Host)).ConfigureAwait(false);
@@ -39,6 +46,7 @@ namespace SimpleHTTP
             async Task getcontent(SinpleHttpRequest thisrequest)
             {
                 var requestcontent = request.Content == null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync();
+                cancellationToken.ThrowIfCancellationRequested();
                 StringBuilder sb = new StringBuilder();
                 IEnumerable<KeyValuePair<string, IEnumerable<string>>> header = request.Headers;
                 //if (/*!request.Headers.Contains("Host")*/true)
@@ -61,7 +69,20 @@ namespace SimpleHTTP
                     }
                 }
                 thisrequest.CustomizeHeader = sb.ToString();
-                httpResponse = await thisrequest.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method,requestcontent);
+                try
+                {
+                    thisrequest.CancellationToken = cancellationToken;
+                    httpResponse = await thisrequest.SendRequestAsync(request.RequestUri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped), request.Method, requestcontent);
+                }
+                catch (OperationCanceledException)
+                {
+                    thisrequest.Dispose();
+                    throw;
+                }
+                finally
+                {
+                    thisrequest.CancellationToken = CancellationToken.None;
+                }
                 _ = CheckQueueAsync();
             }
             if (unbusyelement != null)
@@ -74,7 +95,15 @@ namespace SimpleHTTP
                 TaskCompletionSource<HttpResponseMessage> taskCompletionSource = new TaskCompletionSource<HttpResponseMessage>();
                 concurrentQueue.Enqueue(async() =>
                 {
-                    taskCompletionSource.SetResult(await SendInnerAsync(request, cancellationToken, ip));
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        taskCompletionSource.SetResult(await SendInnerAsync(request, cancellationToken, ip));
+                    }
+                    catch(Exception e)
+                    {
+                        taskCompletionSource.SetException(e);
+                    }
                 });
                 return await taskCompletionSource.Task;
             }
@@ -116,12 +145,18 @@ namespace SimpleHTTP
     }
     internal class SimpleHttpClientHandlerThreadSafe : SimpleHttpClientHandler
     {
+        internal ConcurrentDictionary<string, Task<IPAddress>> hostsdic = new ConcurrentDictionary<string, Task<IPAddress>>();
         protected ConcurrentDictionary<IPAddress, List<SinpleHttpRequest>> dictionary = new ConcurrentDictionary<IPAddress, List<SinpleHttpRequest>>();
         internal override List<SinpleHttpRequest> GetRequestsCache(IPAddress iPAddress)
         {
+            List<SinpleHttpRequest> parse(List<SinpleHttpRequest> list)
+            {
+                list.RemoveAll(a => a.IsDisposed);
+                return list;
+            }
             if (dictionary.TryGetValue(iPAddress, out var value))
             {
-                return value;
+                return parse(value);
             }
             else
             {
@@ -135,6 +170,28 @@ namespace SimpleHTTP
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
+        }
+
+        public override Task<IPAddress> GetIPFromHostAsync(string host)
+        {
+            if(hostsdic.TryGetValue(host,out var ip))
+            {
+                return ip;
+            }
+            else
+            {
+                return base.GetIPFromHostAsync(host);
+            }
+        }
+
+        public override HostsConfig GetHostsConfig()
+        {
+            return new HostsConfig(hostsdic.ToDictionary(a => a.Key, a => a.Value.Result));
+        }
+
+        public override void LoadHostsConfig(HostsConfig hostsConfig)
+        {
+            hostsdic = new ConcurrentDictionary<string, Task<IPAddress>>(hostsConfig.Map.Select(a => new KeyValuePair<string, Task<IPAddress>>(a.Key, Task.FromResult(a.Value))));
         }
     }
 }

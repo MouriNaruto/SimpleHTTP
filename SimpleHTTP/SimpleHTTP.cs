@@ -6,6 +6,7 @@ using System.Text;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace SimpleHTTP
 {
@@ -28,7 +29,7 @@ namespace SimpleHTTP
         public bool IsBusy { get; private set; } = false;
         public int Timeout { get; set; } = 5000;
         public int BufferSize { get; set; } = 8192;
-
+        public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
         #endregion
 
         #region 自定义
@@ -91,7 +92,7 @@ namespace SimpleHTTP
         {
             foreach (var one in message)
             {
-                await networkStream.WriteAsync(one, 0, one.Length).ConfigureAwait(false);
+                await networkStream.WriteAsync(one, 0, one.Length,CancellationToken).ConfigureAwait(false);
             }
             System.IO.MemoryStream memoryStream = new System.IO.MemoryStream();
             byte[] buffer = new byte[BufferSize];
@@ -102,7 +103,7 @@ namespace SimpleHTTP
             {
                 try
                 {
-                    bytes = await networkStream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    bytes = await networkStream.ReadAsync(buffer, 0, buffer.Length,CancellationToken).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -180,11 +181,11 @@ namespace SimpleHTTP
         }
 
         #region IDisposable Support
-        private bool disposedValue = false; // 要检测冗余调用
+        public bool IsDisposed { get; private set; } = false; // 要检测冗余调用
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposedValue)
+            if (!IsDisposed)
             {
                 if (disposing)
                 {
@@ -195,7 +196,7 @@ namespace SimpleHTTP
                 // 释放未托管的资源(未托管的对象)并在以下内容中替代终结器。
                 // 将大型字段设置为 null。
 
-                disposedValue = true;
+                IsDisposed = true;
             }
         }
 
